@@ -51,7 +51,7 @@ vic_fires <- jan18 %>%
   filter(lat < -37, lat > -37.4, 
     lon < 142.5) %>% 
     mutate(time = substr(dettime, 14, 20),
-          size = (firepower/max(firepower))*2) 
+          size = (firepower/10000))
 
 g1 <- ggplot(data = vic_fires) + 
   geom_sf(aes(size = size, colour = size), 
@@ -68,14 +68,16 @@ g1 <- ggplot(data = vic_fires) +
 
 
 anim <- ggplot(data = vic_fires) + 
-  geom_point(aes(x = lon, y = lat, size = size, colour = size), 
-    alpha = 0.7) + 
-  scale_color_distiller(type = "seq", palette = "YlOrRd", 
+  geom_point(aes(x = lon, y = lat, size = size, fill = size), colour = "grey", shape = 21) + 
+  scale_fill_distiller(type = "seq", palette = "YlOrRd", 
     direction = 1) + 
-  geom_text(aes(x = lon, y = lat, label = time), nudge_x = -0.01, nudge_y = 0.007) +
+  labs(title = "Time: {frame_time}") +
+  # geom_text(aes(x = lon, y = lat, label = time), nudge_x = -0.01, nudge_y = 0.007) +
   guides(size = FALSE) + 
   transition_time(date) + 
-  shadow_trail(distance = 0.5, max_frames = 5) + 
+  #shadow_trail(distance = 1, max_frames = 10) + 
+  # shadow_wake(wake_length = 0.3) +
+  shadow_mark(alpha = alpha/2, size = size/2) +
   exit_fade()
 
 animate(anim, nframe = 50, duration = 10)
