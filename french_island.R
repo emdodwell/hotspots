@@ -7,6 +7,8 @@ library(sf)
 library(lubridate)
 library(RColorBrewer)
 library(ggsn)
+library(plotly)
+library(gganimate)
 
 x <- read_csv("data/H08_20200101_0000_1MWLFbet_FLDK.06001_06001.csv")
 
@@ -51,7 +53,7 @@ vic_fires <- jan18 %>%
     mutate(time = substr(dettime, 14, 20),
           size = (firepower/max(firepower))*2) 
 
-ggplot(data = vic_fires) + 
+g1 <- ggplot(data = vic_fires) + 
   geom_sf(aes(size = size, colour = size), 
     alpha = 0.7) + 
   scale_color_distiller(type = "seq", palette = "YlOrRd", 
@@ -63,7 +65,7 @@ ggplot(data = vic_fires) +
   geom_sf_text(aes(label = time), nudge_x = -0.01, nudge_y = 0.007) +
   guides(size = FALSE)
 
-library(gganimate)
+
 
 anim <- ggplot(data = vic_fires) + 
   geom_point(aes(x = lon, y = lat, size = size, colour = size), 
@@ -78,14 +80,16 @@ anim <- ggplot(data = vic_fires) +
 
 animate(anim, nframe = 50, duration = 10)
 
+# Interaction
 
+plotly::ggplotly(g1)
 
 ## Buffer
 vic_points <- jan18 %>%
   filter(lat < -37, lat > -37.4,
     lon < 142.5) %>%
   mutate(time = substr(dettime, 14, 20),
-    size = sqrt(firepower/100)) %>%
+    size = (firepower)/10000) %>%
   mutate(geometry = map2(lon, lat, 
     ~st_point(x = c(.x, .y)))) %>%
   st_as_sf()
@@ -96,5 +100,7 @@ vic_buffer <- vic_points %>%
   mutate(geometry = buffer)
 
 ggplot() +
-  geom_sf(data = vic_buffer) + 
-  geom_sf(data = vic_points)
+  geom_sf(data = vic_buffer, aes(fill = size), alpha = 0.7) + 
+  geom_sf(data = vic_points) + 
+  scale_fill_distiller(type = "seq", palette = "YlOrRd", 
+    direction = 1) 
