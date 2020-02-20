@@ -85,7 +85,7 @@ vic_points <- jan18 %>%
   filter(lat < -37, lat > -37.4,
     lon < 142.5) %>%
   mutate(time = substr(dettime, 14, 20),
-    size = sqrt(firepower/100)) %>%
+    size = (firepower)/10000) %>%
   mutate(geometry = map2(lon, lat, 
     ~st_point(x = c(.x, .y)))) %>%
   st_as_sf()
@@ -96,5 +96,7 @@ vic_buffer <- vic_points %>%
   mutate(geometry = buffer)
 
 ggplot() +
-  geom_sf(data = vic_buffer) + 
-  geom_sf(data = vic_points)
+  geom_sf(data = vic_buffer, aes(fill = size), alpha = 0.7) + 
+  geom_sf(data = vic_points) + 
+  scale_fill_distiller(type = "seq", palette = "YlOrRd", 
+    direction = 1) 
