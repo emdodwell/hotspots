@@ -5,6 +5,9 @@ library(ggplot2)
 library(sf)
 library(lubridate)
 library(tsibble)
+library(data.table)
+library(igraph)
+library(usedist)
 
 # Himawari-8 Hotspots
 x <- read_csv("data/H08_20200101_0000_1MWLFbet_FLDK.06001_06001.csv")
