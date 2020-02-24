@@ -164,3 +164,7 @@ yy
 
 zz <- rbindlist(final, use.names = TRUE)
 zz
+
+saveRDS(yy, "data/point_clusters_test.RDS")
+saveRDS(zz, "data/clusters_test.RDS")
+
