@@ -1,3 +1,16 @@
+---
+title: "Graph Ideas"
+author: "Stephanie and Emily"
+date: "20/02/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+
+```{r}
 # read the data
 library(tidyverse)
 library(readr)
@@ -9,15 +22,14 @@ library(RColorBrewer)
 library(ggsn)
 library(plotly)
 library(gganimate)
+```
 
+
+```{r}
 x <- read_csv("data/H08_20200101_0000_1MWLFbet_FLDK.06001_06001.csv")
 
 states <- absmapsdata::state2016 %>% 
   filter(state_code_2016 %in% c("1", "2"))
-
-ggplot(states) + 
-  geom_sf() +
-  geom_point(aes(x = lon, y = lat), data = x)
 
 jan18 <- x %>% 
   # aus points
@@ -42,16 +54,19 @@ ggplot(fi_map) +
   geom_point(aes(x = lon, y = lat), 
     data = fi, colour = "red", alpha = 0.7) +
   geom_path(aes(x = lon, y = lat, group = date), 
-    data = fi)
+    data = fi) + 
+  geom_text(aes(x = lon, y = lat, label = step), 
+    data = fi, nudge_x = -0.005)
+```
 
 
-
+```{r}
 
 vic_fires <- jan18 %>% 
   filter(lat < -37, lat > -37.4, 
     lon < 142.5) %>% 
     mutate(time = substr(dettime, 14, 20),
-          size = (firepower/10000))
+          size = (firepower/max(firepower))*2) 
 
 g1 <- ggplot(data = vic_fires) + 
   geom_sf(aes(size = size, colour = size), 
@@ -64,6 +79,7 @@ g1 <- ggplot(data = vic_fires) +
     location = "bottomleft") + 
   geom_sf_text(aes(label = time), nudge_x = -0.01, nudge_y = 0.007) +
   guides(size = FALSE)
+
 
 
 
@@ -81,11 +97,10 @@ anim <- ggplot(data = vic_fires) +
   exit_fade()
 
 animate(anim, nframe = 50, duration = 10)
+```
 
-# Interaction
 
-plotly::ggplotly(g1)
-
+```{r}
 ## Buffer
 vic_points <- jan18 %>%
   filter(lat < -37, lat > -37.4,
@@ -106,3 +121,4 @@ ggplot() +
   geom_sf(data = vic_points) + 
   scale_fill_distiller(type = "seq", palette = "YlOrRd", 
     direction = 1) 
+```
