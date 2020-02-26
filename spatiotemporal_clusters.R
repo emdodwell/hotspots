@@ -8,20 +8,33 @@ library(tsibble)
 library(data.table)
 library(igraph)
 library(usedist)
+library(plotly)
+
+options(tibble.width = Inf)
 
 # Himawari-8 Hotspots
-x <- read_csv("data/H08_20200101_0000_1MWLFbet_FLDK.06001_06001.csv")
-x <- x %>% mutate(obstime = `#obstime`)
+# x <- read_csv("data/H08_20200101_0000_1MWLFbet_FLDK.06001_06001.csv", quote = "'")
+# x <- x %>% mutate(obstime = `#obstime`)
+
+x <- fread("data/H08_20200101_0000_1MWLFbet_FLDK.06001_06001.csv", quote = "'")
+setnames(x, "#obstime", "obstime")
+
+# Create date and hour variables
+x[, ':=' (t = ymd_hms(obstime), h = ymd_h(substr(obstime, 1, 13)))]
+vic_fires <- x[t > ymd("2020-01-01") & t < ymd("2020-01-10") & lat < -35]
 
 # Polygon for VIC
 states <- absmapsdata::state2016 %>% 
   filter(state_code_2016 %in% c("2"))
 
-vic_fires <- x %>% 
-  mutate(t = ymd_hms(obstime)) %>%
-  filter(t > ymd("2020-01-18")) %>%
-  filter(t < ymd("2020-01-21")) %>% 
-  filter(lat < -35)
+# vic_fires <- x %>%
+#   mutate(t = ymd_hms(obstime)) %>%
+#   filter(t > ymd("2020-01-18")) %>%
+#   filter(t < ymd("2020-01-21")) %>%
+#   filter(lat < -35)
+
+# Need a filter for intensity?
+# oz_fires <- unique(x[(lon > 112 & lon < 155) & (lat > -44 & lat < -10), .(h, lon, lat)])
 
 ggplot(states) + 
   geom_sf() +
@@ -32,23 +45,25 @@ ggplot(states) +
 ################################################################################
 
 # Subset of fires for code writing
-test <- vic_fires %>% 
-  mutate(day = date(t), hour = hour(t)) %>% 
-  arrange(hour) %>%
-  filter(lon > 144, lat > -36.8, hour > 4) %>%
-  select(lon, lat, hour)
-  # as_tsibble(index = hour) # eventually
+# test <- vic_fires %>% 
+#   mutate(day = date(t), hour = hour(t)) %>% 
+#   arrange(hour) %>%
+#   filter(lon > 144, lat > -36.8, hour > 4) %>%
+#   select(lon, lat, hour)
+# as_tsibble(index = hour) # eventually
+
+test <- vic_fires[lon > 141 & lon < 149 & lat > -39 & lat < 34, .(lon, lat, h, firepower, t07, ref3)]
+test[, ind := as.integer(factor(h))]
 
 # Progression of fires by hour
 ggplot() +
   xlim(146.5, 148.5) + ylim(-36.8, -35.4) +
-  geom_point(aes(x = lon, y = lat), data = test[test$hour == 5,], alpha = .3) +
-  geom_point(aes(x = lon, y = lat), data = test[test$hour == 6,], color = "green", alpha = .5) +
-  geom_point(aes(x = lon, y = lat), data = test[test$hour == 7,], color = "red", alpha = .5) +
-  geom_point(aes(x = lon, y = lat), data = test[test$hour == 8,], color = "blue", alpha = .3) +
-  geom_point(aes(x = lon, y = lat), data = test[test$hour == 9,], color = "black", alpha = .3)
+  geom_point(aes(x = lon, y = lat), data = test[ind == 1], alpha = .3) +
+  geom_point(aes(x = lon, y = lat), data = test[ind == 2], color = "green", alpha = .5) +
+  geom_point(aes(x = lon, y = lat), data = test[ind == 3], color = "red", alpha = .5) +
+  geom_point(aes(x = lon, y = lat), data = test[ind == 4], color = "blue", alpha = .3) +
+  geom_point(aes(x = lon, y = lat), data = test[ind == 5], color = "black", alpha = .3)
 
-test <- data.table(test)
 
 # Function that returns:
 # 1) Distance matrix 
@@ -80,25 +95,27 @@ dist_matrix <- function(dt) {
 
 ### Initialize at t0 
 # (*eventually update for any/every hour i -- index starting at 0)
+# these_hours <- test[, unique(hour)]
+# t0 <- these_hours[1]
 
-  t0 <- 5
-  start <- test[hour == t0]
-  
-  # Calculate distance matrix
-  l <- dist_matrix(start)
-  
-  # Assign cluster membership
-  start[l$mapping$index, cluster := l$mapping$cluster]
+
+init <- test[ind == 1]
+
+# Calculate distance matrix
+l <- dist_matrix(init)
+
+# Assign cluster membership
+init[l$mapping$index, cluster := l$mapping$cluster]
 
 # Two lists: 
 # final is cluster centers by hour (and number of points originally observed in cluster)
 # point_clusters is cluster membership of individual points by hour
 
-  final <- list()
-  final[[t0]] <- start[, .(lon = mean(lon), lat = mean(lat), points = .N), .(hour, cluster)]
-  
-  point_clusters <- list()
-  point_clusters[[t0]] <- start
+final <- list()
+final[[1]] <- init[, .(lon = mean(lon), lat = mean(lat), points = .N), .(ind, h, cluster)] # include last hour
+
+point_clusters <- list()
+point_clusters[[1]] <- init[, .(lon, lat, h, ind, cluster)]
 
 # Code test
 # dt <- data.table(name = c("a", "b", "c", "d"))
@@ -113,20 +130,19 @@ ggplot() +
 
 # Run loop to update recursively for subsequent hours
 
-# Testing:
-# i <- 6
-for (i in c(6:9)) {
+
+for (i in c(2:test[, uniqueN(ind)])) {
   
-  
+  #i <- 2
   # Create data.table that combines cluster centers at time i-1 and points at i
-  focus <- rbindlist(list(final[[i-1]][hour == i-1], test[hour == i]), use.names = TRUE, fill = TRUE)
+  focus <- rbindlist(list(final[[i-1]][ind == (i-1)], test[ind == i]), use.names = TRUE, fill = TRUE)
   
   # Calculate distance matrix and clusters
   l <- dist_matrix(focus[, .(lon, lat)])
   focus[l$mapping$index, assigned := l$mapping$cluster]
   
-  # Number of clusters observed at t-1
-  prev_clust <- nrow(final[[i-1]][hour == (i-1)])
+  # Number of clusters observed at previous time
+  prev_clust <- nrow(final[[i-1]][ind == (i-1)])
   
   # Append columns from distance matrix that capture distance between each 
   # new point at i and previous clusters' centers at i-1
@@ -143,22 +159,20 @@ for (i in c(6:9)) {
   # If point is within radius of existing cluster, assign it to that one;
   # otherwise assign to new cluster identified previously
   focus[, final_clust := ifelse(within_radius == 1, closest_clust, assigned)]
+  # include last_seen hour of final_cluster -- if h-last_seen > 24, update cluster assignment
   
   # Note: rows that are missing values for number of points are new at time i
   # (i.e. they did not represent cluster centers)
-  y <- focus[is.na(points), .(lon, lat, hour, cluster = final_clust)]
+  y <- focus[is.na(points), .(lon, lat, h, ind, cluster = final_clust)]
   point_clusters[[i]] <- y
   
   # Note that cluster centers are preserved for each time i (even if fire "died out")
   # When points = 1, the cluster did not observe any new points at time i
   # (i.e. only point is cluster center)
-  z <- focus[, .(hour = i, lon = mean(lon), lat = mean(lat), points = .N), .(cluster = final_clust)]
+  # Captures how cluster exists in that hour (i.e. point == 1 if no new information since last time period)
+  z <- focus[, .(ind = i, h = focus[ind == i, unique(h)], lon = mean(lon), lat = mean(lat), points = .N), .(cluster = final_clust)]
   final[[i]] <- z
   
-  print(ggplot() +
-    xlim(146.5, 148.5) + ylim(-36.8, -35.4) +
-    geom_point(aes(x = lon, y = lat, color = as.factor(cluster)), data = y) +
-    geom_point(aes(x = lon, y = lat, color = as.factor(cluster)), shape = 4, data = z))
   
 }
 
@@ -168,6 +182,21 @@ yy
 zz <- rbindlist(final, use.names = TRUE)
 zz
 
-saveRDS(yy, "data/point_clusters_test.RDS")
-saveRDS(zz, "data/clusters_test.RDS")
+# saveRDS(yy, "data/point_clusters_20200101_20200110_test.RDS")
+# saveRDS(zz, "data/clusters_20200101_20200110_test.RDS")
 
+# Add back features - averages by hour and cluster
+setkey(yy, ind, h, lon, lat)
+setkey(test, ind, h, lon, lat)
+
+bypoint <- test[yy]
+avgs <- bypoint[, .(firepower = round(mean(firepower, na.rm = TRUE), 1), 
+                    t07 = round(mean(t07, na.rm = TRUE), 1), 
+                    ref3 = round(mean(ref3, na.rm = TRUE), 3)), .(ind, h, cluster)]
+avgs
+
+setkey(avgs, ind, h, cluster)
+setkey(zz, ind, h, cluster)
+byclust <- avgs[zz]
+
+# saveRDS(byclust, "data/data_20200101_20200110_test.RDS")
