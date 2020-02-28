@@ -111,7 +111,16 @@ load("data/d_oz.rda")
 library(ggthemes)
 vic <- filter(d_oz, lat<(-36), lat>-39, lon<149, lon>141, month(dettime)==1, firepower>100)
 ggplot(data=bound_sm) + geom_sf(fill="white") +
-  geom_sf(data=sample_n(shape, 1000), colour="red", alpha=0.5, shape=5) + 
   geom_point(data=vic, aes(x=lon, y=lat, colour=firepower), size=3, alpha=0.1) +
+  geom_sf(data=filter(shape, FEATSUBTYP =="fire station", STATE=="VIC"), colour="red", alpha=0.5, shape=5) + 
   scale_colour_viridis_c() +
   theme_map() + theme(legend.position="bottom")
+# Adding weather station, see weather.R
+ggplot(data=bound_sm) + geom_sf(fill="white") +
+  geom_point(data=vic, aes(x=lon, y=lat, colour=firepower), size=3, alpha=0.1) +
+  geom_sf(data=filter(shape, FEATSUBTYP =="fire station", STATE=="VIC"), colour="red", alpha=0.5, shape=5) + 
+  scale_colour_viridis_c() +
+  geom_point(data=station_id, aes(x=lon, y=lat), shape = 3, colour="yellow") +
+  theme_map() + theme(legend.position="bottom")
+
+

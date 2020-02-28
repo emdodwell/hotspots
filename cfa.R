@@ -4,7 +4,7 @@ library(tidyverse)
 library(rmapshaper)
 shape <- st_read("SDM687777/ll_gda94/sde_shape/whole/VIC/VMFEAT/layer/geomark_point.shp")
 str(shape$geometry)
-sshape$geometry[1:5, ]
+shape$geometry[1:5, ]
 st_geometry(shape) %>% plot()
 stations <- st_geometry(shape)
 
