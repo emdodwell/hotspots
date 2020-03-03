@@ -13,47 +13,34 @@ library(plotly)
 options(tibble.width = Inf)
 
 # Himawari-8 Hotspots
-# x <- read_csv("data/H08_20200101_0000_1MWLFbet_FLDK.06001_06001.csv", quote = "'")
-# x <- x %>% mutate(obstime = `#obstime`)
-
 x <- fread("data/H08_20200101_0000_1MWLFbet_FLDK.06001_06001.csv", quote = "'")
 setnames(x, "#obstime", "obstime")
 
 # Create date and hour variables
 x[, ':=' (t = ymd_hms(obstime), h = ymd_h(substr(obstime, 1, 13)))]
-vic_fires <- x[t > ymd("2020-01-01") & t < ymd("2020-01-10") & lat < -35]
+vic_fires <- x[(lon > 141 & lon < 149) & (lat > -39 & lat < -34)]
 
 # Polygon for VIC
 states <- absmapsdata::state2016 %>% 
   filter(state_code_2016 %in% c("2"))
 
-# vic_fires <- x %>%
-#   mutate(t = ymd_hms(obstime)) %>%
-#   filter(t > ymd("2020-01-18")) %>%
-#   filter(t < ymd("2020-01-21")) %>%
-#   filter(lat < -35)
-
-# Need a filter for intensity?
-# oz_fires <- unique(x[(lon > 112 & lon < 155) & (lat > -44 & lat < -10), .(h, lon, lat)])
-
-ggplot(states) + 
-  geom_sf() +
-  geom_point(aes(x = lon, y = lat), data = vic_fires)
+# To Dos:
+# Apply filter for firepower intensity
+# Incorporate logic for new clusters to form if fire not seen for 24 hours
+# Index by hour - add back hours with no data (use of tsibble?)
+# Note: Oz boundaries (lon > 112 & lon < 155) & (lat > -44 & lat < -10)
 
 ################################################################################
 ## Assign fires to clusters and update at each time interval (currently hour) ##
 ################################################################################
 
-# Subset of fires for code writing
-# test <- vic_fires %>% 
-#   mutate(day = date(t), hour = hour(t)) %>% 
-#   arrange(hour) %>%
-#   filter(lon > 144, lat > -36.8, hour > 4) %>%
-#   select(lon, lat, hour)
-# as_tsibble(index = hour) # eventually
-
-test <- vic_fires[lon > 141 & lon < 149 & lat > -39 & lat < 34, .(lon, lat, h, firepower, t07, ref3)]
+# Subset of days for code writing
+test <- vic_fires[t > ymd("2020-01-01") & t < ymd("2020-01-15"), .(lon, lat, h, firepower, t07, ref3)]
 test[, ind := as.integer(factor(h))]
+
+ggplot(states) + 
+  geom_sf() +
+  geom_point(aes(x = lon, y = lat), data = test)
 
 # Progression of fires by hour
 ggplot() +
@@ -93,15 +80,10 @@ dist_matrix <- function(dt) {
 # calculates their centers, updates cluster membership and centers as new fires 
 # appear in subsequent hours
 
-### Initialize at t0 
-# (*eventually update for any/every hour i -- index starting at 0)
-# these_hours <- test[, unique(hour)]
-# t0 <- these_hours[1]
-
-
+### Initialize at hour index = 1
 init <- test[ind == 1]
 
-# Calculate distance matrix
+# Calculate distance matrix between all hotspots
 l <- dist_matrix(init)
 
 # Assign cluster membership
@@ -112,7 +94,7 @@ init[l$mapping$index, cluster := l$mapping$cluster]
 # point_clusters is cluster membership of individual points by hour
 
 final <- list()
-final[[1]] <- init[, .(lon = mean(lon), lat = mean(lat), points = .N), .(ind, h, cluster)] # include last hour
+final[[1]] <- init[, .(lon = mean(lon), lat = mean(lat), points = .N), .(ind, h, cluster)] #[, last_seen := max(h), cluster] # include last hour
 
 point_clusters <- list()
 point_clusters[[1]] <- init[, .(lon, lat, h, ind, cluster)]
@@ -125,8 +107,8 @@ point_clusters[[1]] <- init[, .(lon, lat, h, ind, cluster)]
 
 ggplot() +
   xlim(146.5, 148.5) + ylim(-36.8, -35.4) +
-  geom_point(aes(x = lon, y = lat, color = as.factor(cluster)), data = start) +
-  geom_point(aes(x = lon, y = lat, color = as.factor(cluster)), shape = 4, data = final[[t0]])
+  geom_point(aes(x = lon, y = lat, color = as.factor(cluster)), data = init) +
+  geom_point(aes(x = lon, y = lat, color = as.factor(cluster)), shape = 4, data = final[[1]])
 
 # Run loop to update recursively for subsequent hours
 
@@ -176,6 +158,7 @@ for (i in c(2:test[, uniqueN(ind)])) {
   
 }
 
+# Combine hourly point cluster assignments and cluster summaries
 yy <- rbindlist(point_clusters, use.names = TRUE)
 yy
 
@@ -185,7 +168,58 @@ zz
 # saveRDS(yy, "data/point_clusters_20200101_20200110_test.RDS")
 # saveRDS(zz, "data/clusters_20200101_20200110_test.RDS")
 
-# Add back features - averages by hour and cluster
+################################################################################
+######################## Assign each fire to CFA Fire Station ##################
+################################################################################
+
+# library(raster)
+# maxs <- pointDistance(first_fire[, .(lon, lat)], stations[, .(lon,lat)], lonlat = TRUE)
+
+# Identify first instance of each fire
+first_fire <- zz[, head(.SD, 1), by = "cluster"]
+
+# CFA Fire Station locations
+stations <- readRDS("data/cfa_stations/cfa_station_locations.RDS")
+
+a <- first_fire[, .(paste0(c(lon, lat), collapse = ",")), by = cluster]
+b <- stations[, .(paste0(c(name, lon, lat), collapse = ",")), by = name]
+
+# Find Euclidean distance between all stations and all fires (note: super hacky)
+c <- CJ(a[, V1], b[, V1])
+
+c[, ':=' (flon = as.numeric(sapply(V1, function(x) strsplit(x, ",")[[1]][1])),
+          flat = as.numeric(sapply(V1, function(x) strsplit(x, ",")[[1]][2])),
+          station = sapply(V2, function(x) strsplit(x, ",")[[1]][1]),
+          slon = as.numeric(sapply(V2, function(x) strsplit(x, ",")[[1]][2])),
+          slat = as.numeric(sapply(V2, function(x) strsplit(x, ",")[[1]][3])))]
+c[, dist := sqrt((slon - flon)^2 + (slat - flat)^2)]
+c[, closest := ifelse(dist == min(dist), 1, 0), V1]
+c <- unique(c[closest == 1][, .(V1, station, slon, slat)])
+
+setkey(c, V1)
+setkey(a, V1)
+a <- c[a]
+a[, V1 := NULL]
+
+
+# Assign stations to clusters
+setkey(a, cluster)
+setkey(zz, cluster)
+zz <- a[zz]
+
+
+# for (i in nrow(first:fire)){
+#   for j in nrow()
+#   
+# }
+# 
+# mycols <- "cluster"
+# zz[, difference := lapply(.SD, function(h) difftime(h, lag(h))), .SDcols = mycols]
+
+################################################################################
+################ Add back features - averages by hour and cluster ##############
+################################################################################
+
 setkey(yy, ind, h, lon, lat)
 setkey(test, ind, h, lon, lat)
 
@@ -199,4 +233,4 @@ setkey(avgs, ind, h, cluster)
 setkey(zz, ind, h, cluster)
 byclust <- avgs[zz]
 
-# saveRDS(byclust, "data/data_20200101_20200110_test.RDS")
+#saveRDS(byclust, "data/data_20200101_20200110_test.RDS")
