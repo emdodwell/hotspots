@@ -6,8 +6,9 @@ library(sf)
 library(plotly)
 
 data <- readRDS("data/data_20200101_20200110_test.RDS")
-test <- data[1:100]
-test[, cluster := as.factor(cluster)]
+focus <- data[date(h) == ymd("2020-01-01")]
+
+focus[, cluster := as.factor(cluster)]
 str(data)
 states <- absmapsdata::state2016 %>% 
   filter(state_code_2016 %in% c("2"))
@@ -16,7 +17,7 @@ states <- absmapsdata::state2016 %>%
 ui <- fluidPage(
   
   # App title ----
-  titlePanel("Victoria Hotpots - TEST"),
+  titlePanel("Victoria Hotspots Prototype: 2020-01-01"),
   
   
   fluidRow(
@@ -34,7 +35,7 @@ ui <- fluidPage(
 
 server <- function(input, output) {
   
-  sd <- highlight_key(test, ~cluster)
+  sd <- highlight_key(focus, ~cluster)
   
   output$vicPlot <- renderPlotly({
     
