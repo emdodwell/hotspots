@@ -44,7 +44,7 @@ ggplot(states) +
 
 # Progression of fires by hour
 ggplot() +
-  xlim(146.5, 148.5) + ylim(-36.8, -35.4) +
+  xlim(146.5, 148.5) + ylim(-37.5, -35.4) +
   geom_point(aes(x = lon, y = lat), data = test[ind == 1], alpha = .3) +
   geom_point(aes(x = lon, y = lat), data = test[ind == 2], color = "green", alpha = .5) +
   geom_point(aes(x = lon, y = lat), data = test[ind == 3], color = "red", alpha = .5) +
@@ -106,16 +106,21 @@ point_clusters[[1]] <- init[, .(lon, lat, h, ind, cluster)]
 # dt
 
 ggplot() +
-  xlim(146.5, 148.5) + ylim(-36.8, -35.4) +
-  geom_point(aes(x = lon, y = lat, color = as.factor(cluster)), data = init) +
+  xlim(146.5, 148.5) + ylim(-37.5, -35.4) +
+  geom_point(aes(x = lon, y = lat, color = as.factor(cluster)), data = point_clusters[[1]]) +
   geom_point(aes(x = lon, y = lat, color = as.factor(cluster)), shape = 4, data = final[[1]])
+
+ggplot() +
+  xlim(141, 149) + ylim(-38, -35.5) +
+  geom_point(aes(x = lon, y = lat, color = as.factor(cluster)), data = point_clusters[[2]]) +
+  geom_point(aes(x = lon, y = lat, color = as.factor(cluster)), shape = 4, data = final[[2]])
 
 # Run loop to update recursively for subsequent hours
 
 
 for (i in c(2:test[, uniqueN(ind)])) {
   
-  #i <- 2
+  # i <- 3
   # Create data.table that combines cluster centers at time i-1 and points at i
   focus <- rbindlist(list(final[[i-1]][ind == (i-1)], test[ind == i]), use.names = TRUE, fill = TRUE)
   
@@ -165,8 +170,19 @@ yy
 zz <- rbindlist(final, use.names = TRUE)
 zz
 
+yy[, cluster := as.factor(cluster)]
+zz[, cluster := as.factor(cluster)]
+
+
 # saveRDS(yy, "data/point_clusters_20200101_20200110_test.RDS")
 # saveRDS(zz, "data/clusters_20200101_20200110_test.RDS")
+
+a <- ggplotly(ggplot() +
+                #xlim(147.5, 148.5) + ylim(-36, -35.4) +
+                geom_point(aes(x = lon, y = lat, color = cluster), data = yy) +
+                geom_point(aes(x = lon, y = lat, color = cluster), shape = 4, data = zz[points > 1 & ind %in% c(1:4)]) +
+                facet_grid(. ~ ind))
+ggplotly(a)
 
 ################################################################################
 ######################## Assign each fire to CFA Fire Station ##################
